@@ -1,26 +1,28 @@
-'''Load image/labels/boxes from an annotation file.
-
-The list file is like:
-
-    img.jpg xmin ymin xmax ymax label xmin ymin xmax ymax label ...
-'''
 from __future__ import print_function
 
 import os
-import sys
 import random
+import sys
 
+import cv2
+import numpy as np
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
 
-import numpy as np
-import cv2
 from encoder import DataEncoder
-from transform import resize, random_flip, random_crop, center_crop
+from transform import center_crop, random_crop, random_flip, resize
+
 
 class ListDataset(data.Dataset):
-    def __init__(self, root, dataset, train, transform, input_size, multi_scale=False):
+    '''Load image/labels/boxes from an annotation file.
+
+    The list file is like:
+
+        img.jpg xmin ymin xmax ymax label xmin ymin xmax ymax label ...
+    '''
+
+   def __init__(self, root, dataset, train, transform, input_size, multi_scale=False):
         '''
         Args:
           root: (str) DB root ditectory.
@@ -30,6 +32,7 @@ class ListDataset(data.Dataset):
           input_size: (int) model input size.
           multi_scale: (bool) use multi-scale training or not.
         '''
+        
         self.root = root
         self.train = train
         self.transform = transform
@@ -40,20 +43,24 @@ class ListDataset(data.Dataset):
         self.labels = []
 
         self.multi_scale = multi_scale
-        self.MULTI_SCALES = [608, 640, 672, 704, 736, 768, 800, 832, 864, 896, 928, 960]  #step1, 2
-        #self.MULTI_SCALES = [960, 992, 1024, 1056, 1088, 1120, 1152, 1184, 1216, 1248, 1280] #step3
+        self.MULTI_SCALES = [608, 640, 672, 704, 736,
+                             768, 800, 832, 864, 896, 928, 960]  # step1, 2
+        # self.MULTI_SCALES = [960, 992, 1024, 1056, 1088, 1120, 1152, 1184, 1216, 1248, 1280] #step3
 
         self.encoder = DataEncoder()
 
+        self.dataset = dataset
         if "SynthText" in dataset:
             self.get_SynthText()
-        if "ICDAR2015" in dataset:
+        elif "ICDAR2015" in dataset or ("ICDAR" in dataset and "2015 in dataset"):
             self.get_ICDAR2015()
-        if "MLT" in dataset:
+        elif "MLT" in dataset:
             self.get_MLT()
-        if "ICDAR2013" in dataset:
+        elif "ICDAR2013" in dataset:
             self.get_ICDAR2013()
-            
+        else:
+            raise Exception(f"Dataset not supported: {dataset}")
+
     def __getitem__(self, idx):
         '''Load image.
 
@@ -74,7 +81,7 @@ class ListDataset(data.Dataset):
         boxes = self.boxes[idx].copy()
         labels = self.labels[idx]
 
-        return {"image" : img, "boxes" : boxes, "labels" : labels}
+        return {"image": img, "boxes": boxes, "labels": labels}
 
     def collate_fn(self, batch):
         '''bbox encode and make batch
@@ -85,8 +92,9 @@ class ListDataset(data.Dataset):
         Returns:
           batch_images, batch_loc, batch_cls
         '''
+
         size = self.input_size
-        if self.multi_scale: # get random input_size for multi-scale traininig
+        if self.multi_scale:  # get random input_size for multi-scale traininig
             random_choice = random.randint(0, len(self.MULTI_SCALES)-1)
             size = self.MULTI_SCALES[random_choice]
 
@@ -95,10 +103,14 @@ class ListDataset(data.Dataset):
         cls_targets = []
 
         for n, data in enumerate(batch):
-            img, boxes, labels = self.transform(size=size)(data['image'], data['boxes'], data['labels'])
+            img, boxes, labels = self.transform(size=size)(data['image'],
+                                                           data['boxes'],
+                                                           data['labels'])
             inputs[n] = img
-            loc_target, cls_target = self.encoder.encode(boxes, labels, input_size=(size, size))
-            
+
+            loc_target, cls_target = self.encoder.encode(boxes, labels,
+                                                         input_size=(size, size))
+
             loc_targets.append(loc_target)
             cls_targets.append(cls_target)
         return inputs, torch.stack(loc_targets), torch.stack(cls_targets)
@@ -136,7 +148,7 @@ class ListDataset(data.Dataset):
                     _x3 = label[0][3][i]
                     _y3 = label[1][3][i]
 
-                    _quad.append([_x0, _y0, _x1, _y1,_x2, _y2, _x3, _y3])
+                    _quad.append([_x0, _y0, _x1, _y1, _x2, _y2, _x3, _y3])
                     _classes.append(1)
 
             else:
@@ -149,7 +161,7 @@ class ListDataset(data.Dataset):
                 _x3 = label[0][3]
                 _y3 = label[1][3]
 
-                _quad.append([_x0, _y0, _x1, _y1,_x2, _y2, _x3, _y3])
+                _quad.append([_x0, _y0, _x1, _y1, _x2, _y2, _x3, _y3])
                 _classes.append(1)
 
             self.fnames.append(img_file)
@@ -157,9 +169,9 @@ class ListDataset(data.Dataset):
             self.labels.append(np.array(_classes))
 
     def get_ICDAR2015(self):
-        data_dir = os.path.join(self.root, 'ICDAR2015_Incidental/')
+        data_dir = os.path.join(self.root, self.dataset)
 
-        dataset_list = os.listdir(data_dir + "train")
+        dataset_list = os.listdir(os.path.join(data_dir, "train_img"))
         dataset_list = [l[:-4] for l in dataset_list if "jpg" in l]
 
         dataset_size = len(dataset_list)
@@ -169,15 +181,20 @@ class ListDataset(data.Dataset):
         print(mode, "ing on ICDAR2015 : ", dataset_size)
 
         for i in dataset_list:
-            img_file = data_dir + "%s/%s.jpg" % (mode, i)
-            label_file = open(data_dir + "%s/gt_%s.txt" % (mode, i))
+            # img_file = data_dir + "%s/%s.jpg" % (mode + "_img", i)
+            # label_file = open(data_dir + "%s/gt_%s.txt" % (mode + "_gt", i))
+
+            img_file = os.path.join(data_dir, f"{mode}_img/{i}.jpg")
+            label_file = open(os.path.join(data_dir, f"{mode}_gt/gt_{i}.txt"))
+
             label_file = label_file.readlines()
 
             _quad = []
             _classes = []
 
             for label in label_file:
-                _x0, _y0, _x1, _y1,_x2, _y2, _x3, _y3, txt = label.split(",")[:9]
+                _x0, _y0, _x1, _y1, _x2, _y2, _x3, _y3, txt = label.split(",")[
+                    :9]
 
                 if "###" in txt:
                     continue
@@ -187,12 +204,13 @@ class ListDataset(data.Dataset):
                 except:
                     _x0 = int(_x0[1:])
 
-                _y0, _x1, _y1,_x2, _y2, _x3, _y3 = [int(p) for p in [_y0, _x1, _y1,_x2, _y2, _x3, _y3]]
+                _y0, _x1, _y1, _x2, _y2, _x3, _y3 = [
+                    int(p) for p in [_y0, _x1, _y1, _x2, _y2, _x3, _y3]]
 
-                _quad.append([_x0, _y0, _x1, _y1,_x2, _y2, _x3, _y3])
+                _quad.append([_x0, _y0, _x1, _y1, _x2, _y2, _x3, _y3])
                 _classes.append(1)
 
-            if len(_quad) is 0:
+            if len(_quad) == 0:
                 self.num_samples -= 1
                 continue
             self.fnames.append(img_file)
@@ -220,7 +238,8 @@ class ListDataset(data.Dataset):
             _classes = []
 
             for label in label_file:
-                _x0, _y0, _x1, _y1,_x2, _y2, _x3, _y3, lang, txt = label.split(",")[:10]
+                _x0, _y0, _x1, _y1, _x2, _y2, _x3, _y3, lang, txt = label.split(",")[
+                    :10]
 
                 if "###" in txt:
                     continue
@@ -230,18 +249,19 @@ class ListDataset(data.Dataset):
                 except:
                     _x0 = int(_x0[1:])
 
-                _y0, _x1, _y1,_x2, _y2, _x3, _y3 = [int(p) for p in [_y0, _x1, _y1,_x2, _y2, _x3, _y3]]
+                _y0, _x1, _y1, _x2, _y2, _x3, _y3 = [
+                    int(p) for p in [_y0, _x1, _y1, _x2, _y2, _x3, _y3]]
 
-                _quad.append([_x0, _y0, _x1, _y1,_x2, _y2, _x3, _y3])
+                _quad.append([_x0, _y0, _x1, _y1, _x2, _y2, _x3, _y3])
                 _classes.append(1)
 
-            if len(_quad) is 0:
+            if len(_quad) == 0:
                 self.num_samples -= 1
                 continue
             self.fnames.append(img_file)
             self.boxes.append(np.array(_quad, dtype=np.float32))
             self.labels.append(np.array(_classes))
-            
+
     def get_ICDAR2013(self):
         data_dir = os.path.join(self.root, 'ICDAR2013_FOCUSED/')
 
@@ -274,23 +294,25 @@ class ListDataset(data.Dataset):
                 _x3 = _xmin
                 _y3 = _ymax
 
-                _x0, _y0, _x1, _y1,_x2, _y2, _x3, _y3 = [int(p) for p in [_x0, _y0, _x1, _y1,_x2, _y2, _x3, _y3]]
+                _x0, _y0, _x1, _y1, _x2, _y2, _x3, _y3 = [
+                    int(p) for p in [_x0, _y0, _x1, _y1, _x2, _y2, _x3, _y3]]
 
-                _quad.append([_x0, _y0, _x1, _y1,_x2, _y2, _x3, _y3])
+                _quad.append([_x0, _y0, _x1, _y1, _x2, _y2, _x3, _y3])
                 _classes.append(1)
 
-            if len(_quad) is 0:
+            if len(_quad) == 0:
                 self.num_samples -= 1
                 continue
             self.fnames.append(img_file)
             self.boxes.append(np.array(_quad, dtype=np.float32))
             self.labels.append(np.array(_classes))
-            
+
+
 def test():
     import torchvision
 
     from augmentations import Augmentation_traininig
-    
+
     dataset = ListDataset(root='/root/DB/',
                           dataset='ICDAR2015', train=True, transform=Augmentation_traininig, input_size=600, multi_scale=True)
 
@@ -298,8 +320,9 @@ def test():
     import numpy as np
     from PIL import Image, ImageDraw
 
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=8, shuffle=False, num_workers=1, collate_fn=dataset.collate_fn)
-    count=0
+    dataloader = torch.utils.data.DataLoader(
+        dataset, batch_size=8, shuffle=False, num_workers=1, collate_fn=dataset.collate_fn)
+    count = 0
     for n, (img, boxes, labels) in enumerate(dataloader):
         print(img.size(), boxes.size())
         exit()
@@ -315,17 +338,18 @@ def test():
         boxes = boxes.reshape(-1, 4, 2)
 
         for box in boxes:
-            draw.polygon(np.expand_dims(box,0), outline=(0,255,0))
+            draw.polygon(np.expand_dims(box, 0), outline=(0, 255, 0))
         img.save('/home/beom/samba/%d.jpg' % n)
 
-        if n==19:
+        if n == 19:
             break
-        
+
+
 def test2():
     import torchvision
 
     from augmentations import Augmentation_traininig
-    
+
     dataset = ListDataset(root='/root/DB/',
                           dataset='ICDAR2015', train=True, transform=Augmentation_traininig, input_size=600, multi_scale=True)
 
@@ -335,28 +359,30 @@ def test2():
 
     for i in range(10):
         data = dataset.__getitem__(i)
-        
+
         random_choice = random.randint(0, len(dataset.MULTI_SCALES)-1)
         size = dataset.MULTI_SCALES[random_choice]
-    
-        img, boxes, labels = dataset.transform(size=size)(data['image'], data['boxes'], data['labels'])
+
+        img, boxes, labels = dataset.transform(size=size)(
+            data['image'], data['boxes'], data['labels'])
 
         img = img.data.numpy()
         img = img.transpose((1, 2, 0))
-        img *= (0.229,0.224,0.225)
-        img += (0.485,0.456,0.406)
+        img *= (0.229, 0.224, 0.225)
+        img += (0.485, 0.456, 0.406)
         img *= 255.
-    
+
         img = np.array(img, dtype=np.uint8)
 
         boxes = boxes.data.numpy()
         boxes = boxes.reshape(-1, 4, 2).astype(np.int32)
 
-        img = cv2.polylines(img, boxes, True, (255,0,0), 4)
-        #cv2.imwrite('/home/beom/samba/%d.jpg' % i, img)
-        
+        img = cv2.polylines(img, boxes, True, (255, 0, 0), 4)
+        # cv2.imwrite('/home/beom/samba/%d.jpg' % i, img)
+
         img = Image.fromarray(img)
         img.save('/home/beom/samba/%d.jpg' % i)
-    
-    
-#test()
+
+
+if __name__ == "__main__":
+    test()

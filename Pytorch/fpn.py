@@ -1,10 +1,10 @@
-'''RetinaFPN in PyTorch.'''
+from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch.autograd import Variable
-from collections import OrderedDict
+
 
 class SEModule(nn.Module):
 
@@ -20,14 +20,16 @@ class SEModule(nn.Module):
 
     def forward(self, x):
         module_input = x
+
         x = self.avg_pool(x)
         x = self.fc1(x)
         x = self.relu(x)
         x = self.fc2(x)
         x = self.sigmoid(x)
+
         return module_input * x
-    
-    
+
+
 class Bottleneck(nn.Module):
     """
     ResNet bottleneck with a Squeeze-and-Excitation module. It follows Caffe
@@ -36,6 +38,7 @@ class Bottleneck(nn.Module):
     """
 
     expansion = 4
+
     def __init__(self, inplanes, planes, groups, reduction, stride=1, downsample=None):
         super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False,
@@ -50,8 +53,7 @@ class Bottleneck(nn.Module):
         self.se_module = SEModule(planes * 4, reduction=reduction)
         self.downsample = downsample
         self.stride = stride
-        
-    
+
     def forward(self, x):
         residual = x
 
@@ -74,8 +76,9 @@ class Bottleneck(nn.Module):
 
         return out
 
-    
+
 class FPN(nn.Module):
+    '''RetinaFPN in PyTorch.'''
 
     def __init__(self, block, layers, groups=1, reduction=16,
                  inplanes=64, downsample_kernel_size=1,
@@ -113,6 +116,7 @@ class FPN(nn.Module):
         num_classes (int): Number of outputs in `last_linear` layer.
             - For all models: 1000
         """
+
         super(FPN, self).__init__()
         self.inplanes = inplanes
 
@@ -126,7 +130,7 @@ class FPN(nn.Module):
         # is used instead of `padding=1`.
         layer0_modules.append(('pool', nn.MaxPool2d(3, stride=2,
                                                     ceil_mode=True)))
-        
+
         self.layer0 = nn.Sequential(OrderedDict(layer0_modules))
         self.layer1 = self._make_layer(
             block,
@@ -167,22 +171,35 @@ class FPN(nn.Module):
             downsample_kernel_size=downsample_kernel_size,
             downsample_padding=downsample_padding
         )
-        
+
         # FPN
         self.conv6 = nn.Conv2d(2048, 256, kernel_size=3, stride=2, padding=1)
-        self.conv7 = nn.Conv2d( 256, 256, kernel_size=3, stride=2, padding=1)
+        self.conv7 = nn.Conv2d(256, 256, kernel_size=3, stride=2, padding=1)
 
         # Lateral layers
-        self.latlayer1 = nn.Conv2d(2048, 256, kernel_size=1, stride=1, padding=0)
-        self.latlayer2 = nn.Conv2d(1024, 256, kernel_size=1, stride=1, padding=0)
-        self.latlayer3 = nn.Conv2d( 512, 256, kernel_size=1, stride=1, padding=0)
-        self.latlayer4 = nn.Conv2d( 256, 256, kernel_size=1, stride=1, padding=0)
+        self.latlayer1 = nn.Conv2d(2048, 256, kernel_size=1,
+                                   stride=1,
+                                   padding=0)
+        self.latlayer2 = nn.Conv2d(1024, 256, kernel_size=1,
+                                   stride=1,
+                                   padding=0)
+        self.latlayer3 = nn.Conv2d(512, 256, kernel_size=1,
+                                   stride=1,
+                                   padding=0)
+        self.latlayer4 = nn.Conv2d(256, 256, kernel_size=1,
+                                   stride=1,
+                                   padding=0)
 
         # Top-down layers
-        self.toplayer1 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
-        self.toplayer2 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
-        self.toplayer3 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
-        
+        self.toplayer1 = nn.Conv2d(256, 256, kernel_size=3,
+                                   stride=1,
+                                   padding=1)
+        self.toplayer2 = nn.Conv2d(256, 256, kernel_size=3,
+                                   stride=1,
+                                   padding=1)
+        self.toplayer3 = nn.Conv2d(256, 256, kernel_size=3,
+                                   stride=1,
+                                   padding=1)
 
     def _make_layer(self, block, planes, blocks, groups, reduction, stride=1,
                     downsample_kernel_size=1, downsample_padding=0):
@@ -225,9 +242,9 @@ class FPN(nn.Module):
 
         So we choose bilinear upsample which supports arbitrary output sizes.
         '''
-        _,_,H,W = y.size()
-        return F.interpolate(x, size=(H,W), mode='bilinear', align_corners=False) + y
-    
+        _, _, H, W = y.size()
+        return F.interpolate(x, size=(H, W), mode='bilinear', align_corners=False) + y
+
     def forward(self, x):
         # Bottom-up
         c1 = self.layer0(x)
@@ -235,7 +252,7 @@ class FPN(nn.Module):
         c3 = self.layer2(c2)
         c4 = self.layer3(c3)
         c5 = self.layer4(c4)
-        
+
         p6 = self.conv6(c5)
         p7 = self.conv7(F.relu(p6))
 
@@ -250,18 +267,21 @@ class FPN(nn.Module):
 
         return p2, p3, p4, p5, p6, p7
 
+
 def FPN50():
-    return FPN(Bottleneck, [3,4,6,3])
+    return FPN(Bottleneck, [3, 4, 6, 3])
+
 
 def FPN101():
-    return FPN(Bottleneck, [2,4,23,3])
+    return FPN(Bottleneck, [2, 4, 23, 3])
 
 
 def test():
     net = FPN50()
-    fms = net(Variable(torch.randn(1,3,608,608)))
+    fms = net(Variable(torch.randn(1, 3, 608, 608)))
     for fm in fms:
         print(fm.size())
 
-#test()
 
+if __name__ == "__main__":
+    test()

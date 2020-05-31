@@ -1,7 +1,9 @@
-import numpy as np
 import os
+
+import numpy as np
 import shapely
-from shapely.geometry import Polygon,MultiPoint
+from shapely.geometry import MultiPoint, Polygon
+
 
 def polygon_from_list(line):
     """
@@ -21,9 +23,10 @@ def polygon_iou(poly1, poly2, union_poly):
     #poly1 = Polygon(polygon_points1).convex_hull
     #polygon_points2 = np.array(list2).reshape(4, 2)
     #poly2 = Polygon(polygon_points2).convex_hull
-    
+
     #union_poly = np.concatenate((polygon_points1,polygon_points2))
-    if not poly1.intersects(poly2): # this test is fast and can accelerate calculation
+    # this test is fast and can accelerate calculation
+    if not poly1.intersects(poly2):
         iou = 0
     else:
         try:
@@ -37,6 +40,7 @@ def polygon_iou(poly1, poly2, union_poly):
             print('shapely.geos.TopologicalError occured, iou set to 0')
             iou = 0
     return iou
+
 
 def non_max_suppression_poly(boxes, scores, iou_thresh):
     """
@@ -58,11 +62,11 @@ def non_max_suppression_poly(boxes, scores, iou_thresh):
                 continue
             if not nms_flag[jj]:
                 continue
-            box1 = boxes[ii] # [4, 2]
-            box2 = boxes[jj] # [4, 2]
+            box1 = boxes[ii]  # [4, 2]
+            box2 = boxes[jj]  # [4, 2]
             box1_score = scores[ii]
-            box2_score = scores[jj] 
-            # str1 = box1[9] 
+            box2_score = scores[jj]
+            # str1 = box1[9]
             # str2 = box2[9]
             #box_i = [box1[0],box1[1],box1[4],box1[5]]
             #box_j = [box2[0],box2[1],box2[4],box2[5]]
@@ -71,18 +75,18 @@ def non_max_suppression_poly(boxes, scores, iou_thresh):
             poly1 = Polygon(box1).convex_hull
             poly2 = Polygon(box2).convex_hull
             iou = polygon_iou(poly1, poly2, union_poly)
-            
+
             #poly1 = polygon_from_list(box1[0:8])
             #poly2 = polygon_from_list(box2[0:8])
             #iou = polygon_iou(box1[0:8],box2[0:8])
 
             if iou > iou_thresh:
                 if box1_score > box2_score:
-                    nms_flag[jj] = False  
+                    nms_flag[jj] = False
                 if box1_score == box2_score and poly1.area > poly2.area:
-                    nms_flag[jj] = False  
-                if box1_score == box2_score and poly1.area<=poly2.area:
-                    nms_flag[ii] = False  
+                    nms_flag[jj] = False
+                if box1_score == box2_score and poly1.area <= poly2.area:
+                    nms_flag[ii] = False
                     break
             '''
             if abs((box_i[3]-box_i[1])-(box_j[3]-box_j[1]))<((box_i[3]-box_i[1])+(box_j[3]-box_j[1]))/2:

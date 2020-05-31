@@ -4,13 +4,13 @@ Download pretrained ResNet50 params from:
   https://download.pytorch.org/models/resnet50-19c8e357.pth
 '''
 import math
+
 import torch
 import torch.nn as nn
 import torch.nn.init as init
 
 from fpn import FPN50
 from retinanet import RetinaNet
-
 
 print('Loading pretrained ResNet50 model..')
 d = torch.load('./weights/se_resnet50-ce0d4300.pth')
@@ -20,7 +20,7 @@ fpn = FPN50()
 dd = fpn.state_dict()
 
 for k in d.keys():
-    #if not k.startswith('fc'):  # skip fc layers        
+    # if not k.startswith('fc'):  # skip fc layers
     if 'last_linear' in k:
         print("break : ", k)
         break

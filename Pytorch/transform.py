@@ -4,7 +4,6 @@ import random
 
 import torch
 import torchvision.transforms as transforms
-
 from PIL import Image, ImageDraw
 
 
@@ -23,11 +22,11 @@ def resize(img, boxes, size, max_size=1000):
       img: (PIL.Image) resized image.
       boxes: (tensor) resized boxes.
     '''
-    
+
     w, h = img.size
     if isinstance(size, int):
-        size_min = min(w,h)
-        size_max = max(w,h)
+        size_min = min(w, h)
+        size_max = max(w, h)
         sw = sh = float(size) / size_min
         if sw * size_max > max_size:
             sw = sh = float(max_size) / size_max
@@ -37,8 +36,9 @@ def resize(img, boxes, size, max_size=1000):
         ow, oh = size
         sw = float(ow) / w
         sh = float(oh) / h
-    return img.resize((ow,oh), Image.BILINEAR), \
-           boxes*torch.Tensor([sw,sh] * 4)
+    return img.resize((ow, oh), Image.BILINEAR), \
+        boxes*torch.Tensor([sw, sh] * 4)
+
 
 def random_crop(img, boxes):
     '''Crop the given PIL image to a random size and aspect ratio.
@@ -79,10 +79,11 @@ def random_crop(img, boxes):
         y = (img.size[1] - h) // 2
 
     img = img.crop((x, y, x+w, y+h))
-    boxes -= torch.Tensor([x,y,x,y])
-    boxes[:,0::2].clamp_(min=0, max=w-1)
-    boxes[:,1::2].clamp_(min=0, max=h-1)
+    boxes -= torch.Tensor([x, y, x, y])
+    boxes[:, 0::2].clamp_(min=0, max=w-1)
+    boxes[:, 1::2].clamp_(min=0, max=h-1)
     return img, boxes
+
 
 def center_crop(img, boxes, size):
     '''Crops the given PIL Image at the center.
@@ -101,10 +102,11 @@ def center_crop(img, boxes, size):
     i = int(round((h - oh) / 2.))
     j = int(round((w - ow) / 2.))
     img = img.crop((j, i, j+ow, i+oh))
-    boxes -= torch.Tensor([j,i,j,i])
-    boxes[:,0::2].clamp_(min=0, max=ow-1)
-    boxes[:,1::2].clamp_(min=0, max=oh-1)
+    boxes -= torch.Tensor([j, i, j, i])
+    boxes[:, 0::2].clamp_(min=0, max=ow-1)
+    boxes[:, 1::2].clamp_(min=0, max=oh-1)
     return img, boxes
+
 
 def random_flip(img, boxes):
     '''Randomly flip the given PIL Image.
@@ -120,11 +122,12 @@ def random_flip(img, boxes):
     if random.random() < 0.5:
         img = img.transpose(Image.FLIP_LEFT_RIGHT)
         w = img.width
-        xmin = w - boxes[:,2]
-        xmax = w - boxes[:,0]
-        boxes[:,0] = xmin
-        boxes[:,2] = xmax
+        xmin = w - boxes[:, 2]
+        xmax = w - boxes[:, 0]
+        boxes[:, 0] = xmin
+        boxes[:, 2] = xmax
     return img, boxes
+
 
 def draw(img, boxes):
     draw = ImageDraw.Draw(img)

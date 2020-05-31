@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
 
 from fpn import FPN50
-from torch.autograd import Variable
 
 
 class RetinaNet(nn.Module):
@@ -17,23 +17,37 @@ class RetinaNet(nn.Module):
 
     def forward(self, x):
         fms = self.fpn(x)
+
         loc_preds = []
         cls_preds = []
-        for fm in fms: #for all FPN features
+        for fm in fms:  # for all FPN features
             loc_pred = self.loc_head(fm)
             cls_pred = self.cls_head(fm)
-            loc_pred = loc_pred.permute(0,2,3,1).contiguous().view(x.size(0),-1,8)                 # [N,H*W*num_anchors, 8]
-            cls_pred = cls_pred.permute(0,2,3,1).contiguous().view(x.size(0),-1,self.num_classes)  # [N,H*W*num_anchors, num_classes]
+
+            loc_pred = loc_pred.permute(0, 2, 3, 1).contiguous().view(
+                x.size(0), -1, 8)                 # [N,H*W*num_anchors, 8]
+            cls_pred = cls_pred.permute(0, 2, 3, 1).contiguous().view(
+                x.size(0), -1, self.num_classes)  # [N,H*W*num_anchors, num_classes]
+
             loc_preds.append(loc_pred)
             cls_preds.append(cls_pred)
-        return torch.cat(loc_preds,1), torch.cat(cls_preds,1)
+
+        return torch.cat(loc_preds, 1), torch.cat(cls_preds, 1)
 
     def _make_head(self, out_planes):
         layers = []
+
         for _ in range(4):
-            layers.append(nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1))
+            layers.append(
+                nn.Conv2d(256, 256, kernel_size=3,
+                          stride=1,
+                          padding=1))
             layers.append(nn.ReLU(True))
-        layers.append(nn.Conv2d(256, out_planes, kernel_size=(3, 5), stride=1, padding=(1, 2)))
+
+        layers.append(nn.Conv2d(256,
+                                out_planes, kernel_size=(3, 5),
+                                stride=1,
+                                padding=(1, 2)))
         return nn.Sequential(*layers)
 
     def freeze_bn(self):
@@ -42,9 +56,10 @@ class RetinaNet(nn.Module):
             if isinstance(layer, nn.BatchNorm2d):
                 layer.eval()
 
+
 def test():
     net = RetinaNet()
-    loc_preds, cls_preds = net(Variable(torch.randn(2,3,224,224)))
+    loc_preds, cls_preds = net(Variable(torch.randn(2, 3, 224, 224)))
     print(loc_preds.size())
     print(cls_preds.size())
     loc_grads = Variable(torch.randn(loc_preds.size()))
@@ -52,4 +67,6 @@ def test():
     loc_preds.backward(loc_grads)
     cls_preds.backward(cls_grads)
 
-# test()
+
+if __name__ == "__main__":
+    test()
